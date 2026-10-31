@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-substitutions:
-  # Register 54 = "AC power ratio" (defined in grid.yaml). Only scale when it
-  # reads a known 10W/LSB value; pass raw watts through otherwise (covers 1,
-  # 0/unsupported and the not-yet-read NaN state).
-  func_scale_ac_power: "return (id(ac_power_ratio).state == 10.0f) ? x * 10.0f : x;"
-
 sensor:
   - platform: modbus_controller
     modbus_controller_id: ${modbus_controller_id}
@@ -120,17 +114,14 @@ sensor:
     icon: "mdi:battery"
 
   # Battery output power (holding register 190, signed 16-bit: positive = discharge, negative = charge).
-  # Per Deye 1P Modbus RTU V119 protocol (p. 9, register 54 "AC power ratio" note:
-  # "Ratio of 167-169, 170-172, 176-178, 190 AC power, Value 10 is 10W, Other values are 1W"),
-  # register 190 is also scaled by register 54 (10W/LSB on >=10kW models where reg 54 == 10, 1W/LSB otherwise).
+  # Note: Although V119 protocol (p. 9, register 54 note) mentions register 190 alongside AC power
+  # registers, hardware verification (#127) confirmed that register 190 is always reported in 1 W/LSB.
   - platform: modbus_controller
     modbus_controller_id: ${modbus_controller_id}
     name: "Battery Power"
     id: battery_power
     register_type: holding
     address: 190
-    filters:
-      - lambda: ${func_scale_ac_power}
     unit_of_measurement: "W"
     device_class: power
     state_class: "measurement"

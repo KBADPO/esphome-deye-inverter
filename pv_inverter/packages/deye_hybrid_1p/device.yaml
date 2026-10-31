@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+globals:
+  - id: meter_ct_raw
+    type: int32_t
+    initial_value: "-1"
+
 sensor:
   - platform: modbus_controller
     modbus_controller_id: ${modbus_controller_id}
@@ -379,16 +384,6 @@ number:
     icon: "mdi:timer-check"
 
 select:
-  # External Meter / CT configuration (Ex_MeterCT, holding register 326).
-  # Per Deye 1P Modbus RTU V119 protocol (p. 29), register 326 is a 16-bit bitfield:
-  #   - Bit 0     (1 / 0x0001):    Enable Meter1 CT ("Enable")
-  #   - Bits 1-4:                  Reserved
-  #   - Bits 5-7:                  Grid side CT ratio (001: 1000:1, 010: 2000:1, ...)
-  #   - Bits 8-12:                 Reserved
-  #   - Bit 13    (8192 / 0x2000): Enable generator force-on ("Generator")
-  #   - Bits 14-15:                Reserved
-  # Previously, "Generator" was mapped to decimal 13 (0x000D = bits 0, 2, 3) instead of
-  # Bit 13 (1 << 13 = 8192 = 0x2000).
   - platform: modbus_controller
     use_write_multiple: true
     modbus_controller_id: ${modbus_controller_id}
@@ -400,4 +395,16 @@ select:
     optionsmap:
       "Disable": 0
       "Enable": 1
-      "Generator": 8192
+    # Register 326 (Ex_MeterCT) is a bitfield per the V119 protocol: bit0 =
+    # meter enable, bits1-3 = phase A/B/C, bits6-7 = direction, bits8-11 = meter
+    # type, bits12-15 = meter 2. Only bit0 is mapped here; the raw value is kept
+    # so writes preserve the other bits.
+    lambda: |-
+      id(meter_ct_raw) = x;
+      return (x & 0x0001) ? std::string("Enable") : std::string("Disable");
+    write_lambda: |-
+      if (id(meter_ct_raw) < 0) {
+        ESP_LOGW("meter", "Register 326 not read yet - write skipped");
+        return {};
+      }
+      return (id(meter_ct_raw) & ~0x0001) | (value & 0x0001);
